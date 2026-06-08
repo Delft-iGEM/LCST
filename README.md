@@ -1,4 +1,4 @@
-# Tm Extractor
+# LCST Extractor
 
 A browser-based tool for standardised, reproducible extraction of melting temperatures (Tm) from absorbance-versus-temperature graphs published as images. No installation, no server, no dependencies to manage — open `tm_extractor.html` in any modern browser and start working.
 
