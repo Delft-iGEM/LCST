@@ -1,18 +1,18 @@
 # LCST Extractor
 
-A browser-based tool for standardised, reproducible extraction of melting temperatures (Tm) from absorbance-versus-temperature graphs published as images. No installation, no server, no dependencies to manage — open `tm_extractor.html` in any modern browser and start working.
+A browser-based tool for standardised, reproducible extraction of Lower Critical Solution Temperature (LCST) from absorbance-versus-temperature graphs published as images. No installation, no server, no dependencies to manage — open `LCST_extraction.html` in any modern browser and start working.
 
 ---
 
 ## The problem it solves
 
-Absorbance melting curves are routinely published as figures in papers, theses, and lab reports. When the raw data is unavailable, extracting Tm values by eye is subjective, hard to document, and not reproducible between analysts. This tool replaces eyeballing with a fully documented, algorithmically consistent workflow:
+Absorbance LCST curves are  published as figures in papers, patents, theses, and lab reports. Most times the raw data is unavailable and in some cases the LCST isn´t specified. Extracting this transition temperature with a consistent adn reproducible protocol is ofe upmost importance for the construction of a dataset that furthers the analytical and quatitative study of ELPs. Extracting LCST values by eye is subjective, hard to document, and not reproducible between analysts. This tool replaces eyeballing with a fully documented, algorithmically consistent workflow:
 
 1. Calibrate the axes against known tick marks on the image
 2. Click points along the curve
-3. The tool fits a LOESS smoother, computes the derivative dA/dT numerically, and reports Tm as the temperature of the peak gradient — the inflection point of the sigmoid
+3. The tool fits a LOESS smoother, computes the derivative dA/dT numerically, and reports LCST as the temperature of the peak gradient (in accordance with the general ELP corpus) — the inflection point of the sigmoid.
 
-Every parameter, every clicked coordinate, and every computed value is saved and can be reloaded, verified, or handed to a collaborator.
+Every parameter, every clicked coordinate, and every computed value is saved and can be reloaded, verified, or handed to a collaborator. This tool isn't exclusive to LCST or Absorbance as a function of temperature, it can be used to get datapoints from any graphed curve. 
 
 ---
 
@@ -35,15 +35,15 @@ Every parameter, every clicked coordinate, and every computed value is saved and
 - Click points along a curve in any order; they are sorted automatically before fitting
 - Undo last point or clear all points for the active curve independently
 
-### Tm computation
+### LCST computation
 - LOESS smoothing with adjustable bandwidth k (3–40); larger k smooths more, smaller k follows the raw data more closely
 - First derivative dA/dT computed by central finite differences on the smoothed curve
-- Tm defined as the temperature at which |dA/dT| is maximised
+- LCST defined as the temperature at which |dA/dT| is maximised
 - Results update live as points are added or smoothing is adjusted
 
 ### Visualisation
 - Live chart panel showing all smoothed curves and their derivatives side by side
-- Tm vertical markers on derivative plots
+- LCST vertical markers on derivative plots
 - Data table of smoothed values for all curves
 
 ### Session save and reload
@@ -51,7 +51,7 @@ Every parameter, every clicked coordinate, and every computed value is saved and
   - The original image
   - `session.json` — full machine-readable record (see below)
   - One `curve_<name>.csv` per curve with raw, smoothed, and derivative columns
-  - `summary.csv` — one row per curve with Tm, max dA/dT, n points, smoothing k
+  - `summary.csv` — one row per curve with LCST, max dA/dT, n points, smoothing k
   - `METHOD.txt` — a plain-English methods description ready to paste into a paper
 - **Load session** restores a previously exported `.zip` or `session.json` exactly, including all calibration points, scale settings, curve points, labels, and smoothing parameter
 
@@ -78,7 +78,7 @@ Every parameter, every clicked coordinate, and every computed value is saved and
 
 ### What is stored and what is purely visual
 
-The X axis calibration maps **horizontal pixel position → temperature** using only `pixel_x` from each calibration click. The vertical position (`pixel_y`) of where you clicked on an X tick mark is stored in the export for traceability but plays no role in any calculation. The reconstructed axis overlay line is drawn at the mean `pixel_y` of your X calibration points — this is visual only and does not affect Tm.
+The X axis calibration maps **horizontal pixel position → temperature** using only `pixel_x` from each calibration click. The vertical position (`pixel_y`) of where you clicked on an X tick mark is stored in the export for traceability but plays no role in any calculation. The reconstructed axis overlay line is drawn at the mean `pixel_y` of your X calibration points — this is visual only and does not affect LCST.
 
 Symmetrically, the Y axis calibration maps **vertical pixel position → absorbance** using only `pixel_y`.
 
@@ -211,7 +211,7 @@ Two analysts working from the same `.zip` session file with the same smoothing p
 ## Limitations
 
 - Calibration assumes the graph axes are linear or log-scale and orthogonal (standard rectangular plot). Polar plots, ternary diagrams, or non-linear axis transformations other than log are not supported.
-- Tm extraction is meaningful for sigmoidal absorbance transitions. Multi-state transitions with multiple inflection points will return only the single largest gradient peak; inspect the derivative chart to confirm the result is the peak you intended.
+- LCST extraction is meaningful for sigmoidal absorbance transitions. Multi-state transitions with multiple inflection points will return only the single largest gradient peak; inspect the derivative chart to confirm the result is the peak you intended.
 - The tool reads images; it does not read embedded data from PDF vector graphics or Excel charts. If the original data file is available, extract it directly rather than digitising.
 
 ---
