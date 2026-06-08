@@ -1,0 +1,1576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tm Extractor — Absorbance Curve Digitizer</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f5f3ee;
+    --surface: #faf9f6;
+    --border: #d8d4cc;
+    --border-light: #e8e4dc;
+    --text: #1a1814;
+    --text-2: #6b6560;
+    --text-3: #9c9690;
+    --accent: #2a5298;
+    --accent-light: #e8eef8;
+    --danger: #8b2020;
+    --danger-light: #faeaea;
+    --success: #1a5c35;
+    --success-light: #e6f4ec;
+    --warn: #7a4f00;
+    --warn-light: #fdf3e3;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  /* ── LAYOUT ── */
+  .app { display: grid; grid-template-columns: 320px 1fr; grid-template-rows: auto 1fr; min-height: 100vh; }
+  .topbar { grid-column: 1/-1; background: var(--text); color: #f5f3ee; padding: 12px 20px; display: flex; align-items: center; gap: 16px; }
+  .topbar-title { font-family: var(--mono); font-size: 13px; font-weight: 500; letter-spacing: .04em; }
+  .topbar-sub { font-size: 11px; color: #9c9690; font-family: var(--mono); }
+  .topbar-actions { margin-left: auto; display: flex; gap: 8px; }
+
+  .sidebar { background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 0; }
+  .main { display: flex; flex-direction: column; overflow: hidden; }
+
+  /* ── SIDEBAR SECTIONS ── */
+  .section { border-bottom: 1px solid var(--border-light); }
+  .section-head { padding: 10px 16px; font-family: var(--mono); font-size: 10px; font-weight: 500; letter-spacing: .1em; color: var(--text-3); text-transform: uppercase; background: var(--bg); cursor: pointer; display: flex; align-items: center; justify-content: space-between; user-select: none; }
+  .section-head .toggle { font-size: 10px; transition: transform .2s; }
+  .section-head.collapsed .toggle { transform: rotate(-90deg); }
+  .section-body { padding: 12px 16px; }
+  .section-body.hidden { display: none; }
+
+  /* ── CONTROLS ── */
+  label { display: block; font-size: 11px; color: var(--text-2); margin-bottom: 3px; margin-top: 8px; font-family: var(--mono); }
+  label:first-child { margin-top: 0; }
+  input[type=text], input[type=number], select {
+    width: 100%; padding: 5px 8px; border: 1px solid var(--border); background: #fff;
+    border-radius: 3px; font-family: var(--mono); font-size: 12px; color: var(--text);
+    outline: none; transition: border .15s;
+  }
+  input:focus, select:focus { border-color: var(--accent); }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+
+  .btn { display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border: 1px solid var(--border); background: #fff; border-radius: 3px; font-family: var(--mono); font-size: 11px; color: var(--text); cursor: pointer; transition: all .15s; white-space: nowrap; }
+  .btn:hover { background: var(--bg); border-color: var(--text-3); }
+  .btn:active { transform: scale(.98); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: #1e3d7a; border-color: #1e3d7a; }
+  .btn.danger { background: var(--danger-light); border-color: var(--danger); color: var(--danger); }
+  .btn.danger:hover { background: #f5d5d5; }
+  .btn.full { width: 100%; justify-content: center; }
+  .btn-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+
+  /* ── MODE BUTTONS ── */
+  .mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 4px; }
+  .mode-btn { padding: 7px 8px; border: 1px solid var(--border); background: #fff; border-radius: 3px; font-family: var(--mono); font-size: 10px; color: var(--text-2); cursor: pointer; transition: all .15s; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .mode-btn .icon { font-size: 14px; }
+  .mode-btn:hover { background: var(--bg); border-color: var(--text-3); color: var(--text); }
+  .mode-btn.active { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
+  .mode-hint { font-size: 11px; color: var(--text-2); background: var(--bg); border-radius: 3px; padding: 6px 8px; margin-top: 6px; line-height: 1.4; border-left: 2px solid var(--border); font-family: var(--mono); }
+
+  /* ── CALIBRATION STATUS ── */
+  .cal-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  .cal-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .cal-dot.done { background: var(--success); }
+  .cal-dot.partial { background: var(--warn); }
+  .cal-dot.empty { background: var(--border); }
+  .cal-label { font-family: var(--mono); font-size: 11px; color: var(--text-2); }
+
+  /* ── CURVE LIST ── */
+  .curve-item { border: 1px solid var(--border-light); border-radius: 4px; padding: 8px 10px; margin-bottom: 6px; cursor: pointer; transition: all .15s; position: relative; }
+  .curve-item:hover { border-color: var(--border); }
+  .curve-item.active { border-color: var(--accent); background: var(--accent-light); }
+  .curve-item-header { display: flex; align-items: center; gap: 6px; }
+  .curve-swatch { width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0; }
+  .curve-name { font-family: var(--mono); font-size: 11px; font-weight: 500; flex: 1; }
+  .curve-name-input { font-family: var(--mono); font-size: 11px; background: transparent; border: none; border-bottom: 1px solid var(--border); outline: none; color: var(--text); flex: 1; padding: 0; }
+  .curve-tm { font-family: var(--mono); font-size: 10px; color: var(--text-2); }
+  .curve-pts { font-family: var(--mono); font-size: 10px; color: var(--text-3); }
+  .curve-del { position: absolute; right: 6px; top: 6px; background: none; border: none; font-size: 13px; color: var(--text-3); cursor: pointer; padding: 0 2px; line-height: 1; }
+  .curve-del:hover { color: var(--danger); }
+
+  /* ── RESULT CARD ── */
+  .result-card { background: var(--surface); border: 1px solid var(--border-light); border-radius: 4px; padding: 10px 12px; margin-bottom: 8px; }
+  .result-big { font-family: var(--mono); font-size: 22px; font-weight: 500; color: var(--text); }
+  .result-label { font-family: var(--mono); font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 2px; }
+
+  /* ── CANVAS AREA ── */
+  .canvas-toolbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 8px 16px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .zoom-row { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+  .canvas-wrap { flex: 1; overflow: hidden; position: relative; background: #e8e4dc; }
+  #main-canvas { display: block; cursor: crosshair; }
+  .drop-zone { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--text-3); font-family: var(--mono); font-size: 12px; width: 100%; height: 100%; min-height: 400px; }
+  .drop-zone-icon { font-size: 48px; opacity: .3; }
+  .drop-zone.dragover { background: var(--accent-light); }
+
+  /* ── CHART PANEL ── */
+  .chart-panel { border-top: 1px solid var(--border); background: var(--surface); padding: 12px 16px; }
+  .chart-row { display: flex; gap: 16px; align-items: flex-start; }
+  .chart-box { flex: 1; position: relative; height: 160px; }
+  .chart-legend { display: flex; flex-direction: column; gap: 4px; min-width: 120px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 10px; color: var(--text-2); }
+  .legend-swatch { width: 20px; height: 2px; flex-shrink: 0; }
+  .legend-swatch.dashed { background: repeating-linear-gradient(90deg, currentColor 0, currentColor 4px, transparent 4px, transparent 8px); }
+
+  /* ── TABS ── */
+  .tab-row { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+  .tab { padding: 6px 14px; font-family: var(--mono); font-size: 11px; color: var(--text-3); cursor: pointer; border-bottom: 2px solid transparent; transition: all .15s; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* ── MISC ── */
+  .divider { height: 1px; background: var(--border-light); margin: 10px 0; }
+  .mono { font-family: var(--mono); }
+  .tag { display: inline-block; font-family: var(--mono); font-size: 10px; padding: 2px 6px; border-radius: 2px; }
+  .tag-ok { background: var(--success-light); color: var(--success); }
+  .tag-warn { background: var(--warn-light); color: var(--warn); }
+  .tag-info { background: var(--accent-light); color: var(--accent); }
+  .flex { display: flex; }
+  .gap-6 { gap: 6px; }
+  .gap-8 { gap: 8px; }
+  .mt-4 { margin-top: 4px; }
+  .mt-8 { margin-top: 8px; }
+  small { font-size: 10px; color: var(--text-3); font-family: var(--mono); }
+
+  /* ── TOOLTIP ── */
+  .tooltip { position: absolute; background: var(--text); color: #f5f3ee; font-family: var(--mono); font-size: 10px; padding: 4px 8px; border-radius: 3px; pointer-events: none; white-space: nowrap; display: none; z-index: 100; }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  @media (max-width: 800px) {
+    .app { grid-template-columns: 1fr; }
+    .sidebar { max-height: 50vh; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div>
+    <div class="topbar-title">Tm Extractor v2</div>
+    <div class="topbar-sub">absorbance curve digitizer</div>
+  </div>
+  <div class="topbar-actions">
+    <button class="btn" id="btn-load-session" title="Load a previously saved session">↑ Load session</button>
+    <button class="btn primary" id="btn-export-all">↓ Export session</button>
+  </div>
+</div>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+
+  <!-- IMAGE -->
+  <div class="section">
+    <div class="section-head" data-sec="image">Image <span class="toggle">▾</span></div>
+    <div class="section-body" id="sec-image">
+      <input type="file" id="file-input" accept="image/*" style="width:100%;font-family:var(--mono);font-size:11px">
+      <small style="display:block;margin-top:4px">or paste (Ctrl+V) / drag &amp; drop</small>
+      <div class="divider"></div>
+      <label>Image label / filename</label>
+      <input type="text" id="img-label" placeholder="e.g. Fig2A_sample1">
+      <label>Experiment notes</label>
+      <input type="text" id="img-notes" placeholder="Optional metadata">
+      <div class="divider"></div>
+      <div class="btn-row">
+        <button class="btn" id="btn-rotate-cw" title="Rotate image 90° clockwise. Note: clears all calibration points and digitized curve points." style="font-size:11px">↻ Rotate 90° CW</button>
+      </div>
+      <small style="display:block;margin-top:4px;line-height:1.4">Rotation clears all calibration and curve points — re-calibrate after rotating.</small>
+    </div>
+  </div>
+
+  <!-- AXIS CALIBRATION -->
+  <div class="section">
+    <div class="section-head" data-sec="axis">Axis calibration <span class="toggle">▾</span></div>
+    <div class="section-body" id="sec-axis">
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+        <div><label style="margin-top:0">X unit</label><input type="text" id="x-unit" placeholder="°C" value="°C"></div>
+        <div><label style="margin-top:0">Y label</label><input type="text" id="y-label" placeholder="Absorbance" value="Absorbance"></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+        <div>
+          <label style="margin-top:0">X axis scale</label>
+          <select id="x-scale" style="width:100%;font-family:var(--mono);font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:3px;background:#fff;color:var(--text)">
+            <option value="linear" selected>Linear</option>
+            <option value="log">Log</option>
+          </select>
+        </div>
+        <div>
+          <label style="margin-top:0">Y axis scale</label>
+          <select id="y-scale" style="width:100%;font-family:var(--mono);font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:3px;background:#fff;color:var(--text)">
+            <option value="linear" selected>Linear</option>
+            <option value="log">Log</option>
+          </select>
+        </div>
+      </div>
+      <div id="scale-warning" style="display:none;font-family:var(--mono);font-size:10px;color:var(--warn);background:var(--warn-light);padding:5px 8px;border-radius:3px;margin-bottom:8px;line-height:1.4"></div>
+
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+        <label style="margin:0;flex:1">Snap radius (px)</label>
+        <input type="range" id="snap-radius" min="2" max="20" step="1" value="8" style="width:70px">
+        <span id="snap-radius-val" style="font-family:var(--mono);font-size:11px;min-width:20px;text-align:right">8</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <input type="checkbox" id="snap-toggle" checked style="accent-color:var(--accent)">
+        <label for="snap-toggle" style="margin:0;cursor:pointer">Snap to dark-pixel centroid</label>
+      </div>
+
+      <div class="divider" style="margin-bottom:10px"></div>
+
+      <div style="font-family:var(--mono);font-size:10px;font-weight:500;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">X axis points</div>
+      <div id="cal-x-status" style="font-family:var(--mono);font-size:11px;color:var(--text-2);margin-bottom:4px">0 points — need ≥ 2</div>
+      <div id="cal-x-r2" style="font-family:var(--mono);font-size:10px;color:var(--text-3);margin-bottom:6px"></div>
+      <div id="cal-x-list" style="margin-bottom:6px"></div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input type="number" id="cal-x-pending" placeholder="Enter tick value then click" style="flex:1;font-size:12px">
+        <small id="cal-x-pending-hint" style="color:var(--accent);min-width:60px">click a point first</small>
+      </div>
+
+      <div class="divider" style="margin:10px 0"></div>
+
+      <div style="font-family:var(--mono);font-size:10px;font-weight:500;color:var(--text-3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Y axis points</div>
+      <div id="cal-y-status" style="font-family:var(--mono);font-size:11px;color:var(--text-2);margin-bottom:4px">0 points — need ≥ 2</div>
+      <div id="cal-y-r2" style="font-family:var(--mono);font-size:10px;color:var(--text-3);margin-bottom:6px"></div>
+      <div id="cal-y-list" style="margin-bottom:6px"></div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input type="number" id="cal-y-pending" placeholder="Enter tick value then click" style="flex:1;font-size:12px">
+        <small id="cal-y-pending-hint" style="color:var(--accent);min-width:60px">click a point first</small>
+      </div>
+
+      <div class="btn-row" style="margin-top:10px">
+        <button class="btn danger" id="btn-clear-axis" style="font-size:10px">Clear all axis points</button>
+      </div>
+
+      <div class="divider" style="margin:10px 0 8px"></div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="show-axis-overlay" checked style="accent-color:var(--accent)">
+        <label for="show-axis-overlay" style="margin:0;cursor:pointer;font-size:12px">Show reconstructed axes</label>
+      </div>
+      <small style="display:block;margin-top:3px;line-height:1.4">Overlays fitted axis lines and tick labels on the image to verify calibration alignment.</small>
+    </div>
+  </div>
+
+  <!-- MODE -->
+  <div class="section">
+    <div class="section-head" data-sec="mode">Interaction mode <span class="toggle">▾</span></div>
+    <div class="section-body" id="sec-mode">
+      <div class="mode-grid">
+        <button class="mode-btn active" id="btn-mode-x" data-mode="axis-x"><span class="icon">↔</span>Calibrate X</button>
+        <button class="mode-btn" id="btn-mode-y" data-mode="axis-y"><span class="icon">↕</span>Calibrate Y</button>
+        <button class="mode-btn" id="btn-mode-pts" data-mode="points"><span class="icon">✦</span>Digitize</button>
+        <button class="mode-btn" id="btn-mode-pan" data-mode="pan"><span class="icon">✥</span>Pan / zoom</button>
+      </div>
+      <div class="mode-hint" id="mode-hint">Click two known points on the X axis, then enter their real values in Axis calibration.</div>
+      <div class="btn-row">
+        <button class="btn" id="btn-undo" style="font-size:10px">↩ Undo last</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CURVES -->
+  <div class="section">
+    <div class="section-head" data-sec="curves">Curves <span class="toggle">▾</span></div>
+    <div class="section-body" id="sec-curves">
+      <div id="curve-list"></div>
+      <button class="btn full mt-4" id="btn-add-curve">+ Add curve</button>
+      <div class="divider"></div>
+      <label>Smoothing bandwidth (k)</label>
+      <input type="range" id="smooth-slider" min="1" max="40" step="1" value="10">
+      <div style="display:flex;justify-content:space-between"><small>less smooth</small><small id="smooth-val">10</small><small>more smooth</small></div>
+      <div class="btn-row">
+        <button class="btn danger" id="btn-clear-curve-pts" style="font-size:10px">Clear active curve pts</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RESULTS -->
+  <div class="section">
+    <div class="section-head" data-sec="results">Results <span class="toggle">▾</span></div>
+    <div class="section-body" id="sec-results">
+      <div id="results-list"><small>No curves computed yet.</small></div>
+    </div>
+  </div>
+
+  <!-- ZOOM -->
+  <div class="section">
+    <div class="section-head" data-sec="zoom">Zoom <span class="toggle">▾</span></div>
+    <div class="section-body" id="sec-zoom">
+      <input type="range" id="zoom-slider" min="1" max="8" step="0.1" value="1">
+      <div style="display:flex;justify-content:space-between"><small>1×</small><small id="zoom-val">1.0×</small><small>8×</small></div>
+      <div class="btn-row">
+        <button class="btn" id="btn-reset-view" style="font-size:10px">Reset view</button>
+      </div>
+    </div>
+  </div>
+
+</aside>
+
+<!-- MAIN -->
+<main class="main">
+  <div class="canvas-toolbar">
+    <span class="mono" style="font-size:11px;color:var(--text-3)" id="coord-display">—</span>
+    <div style="margin-left:auto;display:flex;gap:6px">
+      <span id="active-curve-badge" class="tag tag-info" style="display:none"></span>
+    </div>
+  </div>
+
+  <div class="canvas-wrap" id="canvas-wrap">
+    <div class="drop-zone" id="drop-zone">
+      <div class="drop-zone-icon">⊞</div>
+      <div>Drop an image here</div>
+      <div style="color:var(--text-3);font-size:10px">or use the file picker in the sidebar</div>
+      <label class="btn" style="cursor:pointer;margin-top:8px">
+        Browse file
+        <input type="file" accept="image/*" id="file-input2" style="display:none">
+      </label>
+    </div>
+    <canvas id="main-canvas" style="display:none"></canvas>
+    <div class="tooltip" id="tooltip"></div>
+  </div>
+
+  <div class="chart-panel" id="chart-panel" style="display:none">
+    <div class="tab-row">
+      <div class="tab active" data-tab="combined">All curves</div>
+      <div class="tab" data-tab="deriv">Derivatives</div>
+      <div class="tab" data-tab="data">Data table</div>
+    </div>
+    <div id="tab-combined" class="tab-content">
+      <div class="chart-row">
+        <div class="chart-box"><canvas id="chart-combined" role="img" aria-label="Smoothed absorbance curves"></canvas></div>
+        <div class="chart-box"><canvas id="chart-deriv" role="img" aria-label="Derivative curves showing Tm peaks"></canvas></div>
+      </div>
+    </div>
+    <div id="tab-deriv" class="tab-content" style="display:none">
+      <div class="chart-box" style="height:200px"><canvas id="chart-deriv2" role="img" aria-label="All derivative curves"></canvas></div>
+    </div>
+    <div id="tab-data" class="tab-content" style="display:none">
+      <div id="data-table-container" style="max-height:200px;overflow-y:auto;font-family:var(--mono);font-size:11px"></div>
+    </div>
+  </div>
+</main>
+
+</div>
+
+<input type="file" id="session-load-input" accept=".json" style="display:none">
+
+<script>
+// ─────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────
+const COLORS = ['#2a5298','#8b2020','#1a5c35','#7a4f00','#4a1a6b','#0d5e6e','#6b3a1a','#1a3d5c'];
+
+const state = {
+  img: null,
+  imgDataUrl: null,
+  imgPixelData: null,
+  zoom: 1,
+  offsetX: 0, offsetY: 0,
+  dragging: false, lastMx: 0, lastMy: 0,
+  imgW: 0, imgH: 0, // original image pixels
+  displayScale: 1,  // factor to fit image in canvas element at zoom=1
+  mode: 'axis-x',
+  axisX: [],  // [{px, py}] in original image coords
+  axisY: [],
+  curves: [],
+  activeCurveIdx: 0,
+  smoothK: 10,
+  charts: {}
+};
+
+function newCurve(idx) {
+  return { id: Date.now() + idx, name: 'Curve ' + (idx+1), label: '', color: COLORS[idx % COLORS.length], points: [], tm: null, smoothed: [], deriv: [], derivXs: [] };
+}
+
+// ─────────────────────────────────────────────
+// CANVAS REFS
+// ─────────────────────────────────────────────
+const mainCanvas = document.getElementById('main-canvas');
+const mctx = mainCanvas.getContext('2d');
+const octx = mctx; // single canvas — overlay drawn on top of image in same draw call
+const canvasWrap = document.getElementById('canvas-wrap');
+const dropZone = document.getElementById('drop-zone');
+const tooltip = document.getElementById('tooltip');
+
+// ─────────────────────────────────────────────
+// COLLAPSIBLE SECTIONS
+// ─────────────────────────────────────────────
+document.querySelectorAll('.section-head').forEach(head => {
+  head.addEventListener('click', () => {
+    const id = head.dataset.sec;
+    const body = document.getElementById('sec-' + id);
+    head.classList.toggle('collapsed');
+    body.classList.toggle('hidden');
+  });
+});
+
+// ─────────────────────────────────────────────
+// IMAGE LOAD
+// ─────────────────────────────────────────────
+function loadImageSrc(src) {
+  const img = new Image();
+  img.onload = () => {
+    state.img = img;
+    state.imgDataUrl = src;
+    state.imgW = img.width;
+    state.imgH = img.height;
+
+    // Extract pixel data at full resolution for snap-to-centroid
+    const tmpC = document.createElement('canvas');
+    tmpC.width = img.width; tmpC.height = img.height;
+    const tmpCtx = tmpC.getContext('2d');
+    tmpCtx.drawImage(img, 0, 0);
+    state.imgPixelData = tmpCtx.getImageData(0,0,img.width,img.height).data;
+
+    const wrapW = canvasWrap.clientWidth || 800;
+    const wrapH = canvasWrap.clientHeight || 500;
+    state.displayScale = Math.min(1, wrapW / img.width, wrapH / img.height);
+
+    // Set canvas resolution to exactly match its rendered CSS size.
+    // Do NOT apply CSS width/height — let the resolution drive the element size.
+    mainCanvas.width  = wrapW;
+    mainCanvas.height = wrapH;
+
+    state.zoom = 1; state.offsetX = 0; state.offsetY = 0;
+    document.getElementById('zoom-slider').value = 1;
+    document.getElementById('zoom-val').textContent = '1.0×';
+
+    dropZone.style.display = 'none';
+    mainCanvas.style.display = 'block';
+    draw();
+  };
+  img.src = src;
+}
+
+function handleFile(f) {
+  if (!f || !f.type.startsWith('image/')) return;
+  const r = new FileReader();
+  r.onload = e => loadImageSrc(e.target.result);
+  r.readAsDataURL(f);
+}
+
+document.getElementById('file-input').onchange = e => handleFile(e.target.files[0]);
+document.getElementById('file-input2').onchange = e => handleFile(e.target.files[0]);
+
+document.addEventListener('paste', e => {
+  for (const item of (e.clipboardData?.items || [])) {
+    if (item.type.startsWith('image/')) { handleFile(item.getAsFile()); break; }
+  }
+});
+
+canvasWrap.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+canvasWrap.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+canvasWrap.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('dragover');
+  handleFile(e.dataTransfer.files[0]);
+});
+
+// ─────────────────────────────────────────────
+// ROTATE IMAGE
+// ─────────────────────────────────────────────
+function rotateImageCW() {
+  if (!state.img) return;
+  const tmp = document.createElement('canvas');
+  tmp.width = state.imgH; tmp.height = state.imgW;
+  const ctx = tmp.getContext('2d');
+  ctx.translate(tmp.width/2, tmp.height/2);
+  ctx.rotate(Math.PI/2);
+  ctx.drawImage(state.img, -state.imgW/2, -state.imgH/2);
+  const newDataUrl = tmp.toDataURL('image/png');
+  // Clear all calibration and curve points since pixel coords are now invalid
+  state.axisX=[]; state.axisY=[];
+  state.curves.forEach(c=>{ c.points=[]; c.tm=null; c.smoothed=[]; c.deriv=[]; c.derivXs=[]; });
+  updateCalStatus(); renderCurveList(); renderResults();
+  ['combined','deriv','deriv2'].forEach(id=>destroyChart(id));
+  document.getElementById('chart-panel').style.display='none';
+  loadImageSrc(newDataUrl);
+}
+
+document.getElementById('btn-rotate-cw').onclick = rotateImageCW;
+
+// ─────────────────────────────────────────────
+// COORDINATE TRANSFORMS
+// ─────────────────────────────────────────────
+// canvas pixel → original image pixel
+// e.offsetX/offsetY are in CSS pixels; correct for any CSS↔resolution scale mismatch
+function canvasToImg(cssX, cssY) {
+  const rect = mainCanvas.getBoundingClientRect();
+  const scaleX = mainCanvas.width  / rect.width;
+  const scaleY = mainCanvas.height / rect.height;
+  const cx = cssX * scaleX;
+  const cy = cssY * scaleY;
+  return {
+    x: cx / state.zoom / state.displayScale + state.offsetX / state.displayScale,
+    y: cy / state.zoom / state.displayScale + state.offsetY / state.displayScale
+  };
+}
+// original image pixel → canvas pixel
+function imgToCanvas(ix, iy) {
+  return {
+    x: (ix * state.displayScale - state.offsetX) * state.zoom,
+    y: (iy * state.displayScale - state.offsetY) * state.zoom
+  };
+}
+
+// Linear regression: returns {slope, intercept, r2} mapping pixelArr→transformedValArr
+function linReg(pixArr, valArr) {
+  const n = pixArr.length;
+  if (n < 2) return null;
+  let sx=0,sy=0,sxx=0,sxy=0;
+  for (let i=0;i<n;i++){sx+=pixArr[i];sy+=valArr[i];sxx+=pixArr[i]*pixArr[i];sxy+=pixArr[i]*valArr[i];}
+  const det = n*sxx - sx*sx;
+  if (Math.abs(det)<1e-12) return null;
+  const slope = (n*sxy - sx*sy)/det;
+  const intercept = (sy - slope*sx)/n;
+  const yMean = sy/n;
+  let ssTot=0,ssRes=0;
+  for(let i=0;i<n;i++){ssTot+=(valArr[i]-yMean)**2;ssRes+=(valArr[i]-(slope*pixArr[i]+intercept))**2;}
+  const r2 = ssTot>0 ? 1-ssRes/ssTot : 1;
+  return {slope, intercept, r2};
+}
+
+// Scale helpers — apply before regression, invert after
+function scaleVal(v, isLog) {
+  if (isLog) {
+    if (v <= 0) return null; // log of non-positive is undefined
+    return Math.log10(v);
+  }
+  return v;
+}
+function unscaleVal(v, isLog) {
+  return isLog ? Math.pow(10, v) : v;
+}
+// Inverse: given a data value, return the pixel coord (for axis overlay)
+function dataToImgPx(dataVal, reg, isLog) {
+  if (!reg) return null;
+  const tv = scaleVal(dataVal, isLog);
+  if (tv === null) return null;
+  // pixel = (transformedVal - intercept) / slope
+  return (tv - reg.intercept) / reg.slope;
+}
+
+function getScaleX() { return document.getElementById('x-scale').value === 'log'; }
+function getScaleY() { return document.getElementById('y-scale').value === 'log'; }
+
+function getCalX() {
+  const isLog = getScaleX();
+  const pixArr = state.axisX.map(p => p.px);
+  const valArr = state.axisX.map(p => scaleVal(p.val, isLog)).filter(v => v !== null);
+  if (valArr.length !== pixArr.length) return null; // some vals invalid for log
+  return linReg(pixArr, valArr);
+}
+function getCalY() {
+  const isLog = getScaleY();
+  const pixArr = state.axisY.map(p => p.py);
+  const valArr = state.axisY.map(p => scaleVal(p.val, isLog)).filter(v => v !== null);
+  if (valArr.length !== pixArr.length) return null;
+  return linReg(pixArr, valArr);
+}
+
+// original image pixel → data value using regression fits
+function imgToData(px, py) {
+  const cx = getCalX(), cy = getCalY();
+  if (!cx || !cy) return null;
+  return {
+    x: unscaleVal(cx.slope*px + cx.intercept, getScaleX()),
+    y: unscaleVal(cy.slope*py + cy.intercept, getScaleY())
+  };
+}
+
+// Validate log-scale calibration points and show warnings
+function checkScaleWarnings() {
+  const warns = [];
+  if (getScaleX()) {
+    const bad = state.axisX.filter(p => p.val <= 0);
+    if (bad.length) warns.push(`X log scale: ${bad.length} point(s) have value ≤ 0 — log is undefined. Remove them.`);
+  }
+  if (getScaleY()) {
+    const bad = state.axisY.filter(p => p.val <= 0);
+    if (bad.length) warns.push(`Y log scale: ${bad.length} point(s) have value ≤ 0 — log is undefined. Remove them.`);
+  }
+  const el = document.getElementById('scale-warning');
+  if (warns.length) { el.style.display='block'; el.textContent=warns.join(' | '); }
+  else el.style.display='none';
+}
+
+// ─────────────────────────────────────────────
+// CENTROID SNAP
+// ─────────────────────────────────────────────
+// Reads raw image pixels, finds centroid of dark pixels within a radius
+// around the clicked point. Returns snapped {px, py} in image coords.
+function snapToCentroid(imgX, imgY, radiusPx) {
+  if (!document.getElementById('snap-toggle').checked) return {px:imgX, py:imgY};
+  if (!state.imgPixelData) return {px:imgX, py:imgY};
+  const data = state.imgPixelData;
+  const W = state.imgW, H = state.imgH;
+  const r = Math.round(radiusPx);
+  const x0 = Math.round(imgX), y0 = Math.round(imgY);
+
+  // Compute luminance threshold: sample the local region, find darkest pixels
+  let minL = 255, maxL = 0;
+  const samples = [];
+  for (let dy=-r;dy<=r;dy++) for (let dx=-r;dx<=r;dx++) {
+    const px = x0+dx, py = y0+dy;
+    if (px<0||py<0||px>=W||py>=H) continue;
+    const idx=(py*W+px)*4;
+    const L = 0.299*data[idx]+0.587*data[idx+1]+0.114*data[idx+2];
+    samples.push(L);
+    if(L<minL) minL=L;
+    if(L>maxL) maxL=L;
+  }
+  // Threshold: pixels darker than mean of (min + 30% of range)
+  const thresh = minL + 0.3*(maxL-minL);
+
+  let wx=0,wy=0,w=0;
+  for (let dy=-r;dy<=r;dy++) for (let dx=-r;dx<=r;dx++) {
+    if(dx*dx+dy*dy>r*r) continue;
+    const px=x0+dx,py=y0+dy;
+    if(px<0||py<0||px>=W||py>=H) continue;
+    const idx=(py*W+px)*4;
+    const L=0.299*data[idx]+0.587*data[idx+1]+0.114*data[idx+2];
+    if(L<=thresh){const weight=thresh-L+1;wx+=px*weight;wy+=py*weight;w+=weight;}
+  }
+  if(w<1) return {px:imgX,py:imgY}; // nothing dark found, no snap
+  return {px:wx/w, py:wy/w};
+}
+
+// ─────────────────────────────────────────────
+// DRAW — single canvas, image-space transform
+// ─────────────────────────────────────────────
+function draw() {
+  if (!state.img) return;
+  const W = mainCanvas.width, H = mainCanvas.height;
+  mctx.clearRect(0, 0, W, H);
+
+  // Fill background
+  mctx.fillStyle = '#e8e4dc';
+  mctx.fillRect(0, 0, W, H);
+
+  // ── Draw image under the shared transform ──
+  // imgToCanvas converts image-pixel coords → canvas coords correctly for
+  // any zoom/offset, so we simply draw the image corners through that transform.
+  const tl = imgToCanvas(0, 0);
+  const br = imgToCanvas(state.imgW, state.imgH);
+  mctx.drawImage(state.img, tl.x, tl.y, br.x - tl.x, br.y - tl.y);
+
+  // ── Helper: draw a dot at image-pixel coords ──
+  function dot(ipx, ipy, color, label, r=5) {
+    const c = imgToCanvas(ipx, ipy);
+    mctx.beginPath(); mctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+    mctx.fillStyle = color; mctx.fill();
+    mctx.strokeStyle = '#fff'; mctx.lineWidth = 1.5; mctx.stroke();
+    if (label) {
+      mctx.fillStyle = color; mctx.font = 'bold 10px monospace';
+      mctx.fillText(label, c.x + r + 2, c.y - 4);
+    }
+  }
+
+  // ── Axis calibration points ──
+  state.axisX.forEach(p => dot(p.px, p.py, '#2a5298', 'X:' + p.val));
+  state.axisY.forEach(p => dot(p.px, p.py, '#8b2020', 'Y:' + p.val));
+
+  // ── Reconstructed axis overlay ──
+  if (document.getElementById('show-axis-overlay') && document.getElementById('show-axis-overlay').checked) {
+    const calX = getCalX(), calY = getCalY();
+    const isLogX = getScaleX(), isLogY = getScaleY();
+
+    // X axis overlay — draw a horizontal line at the mean Y pixel of X calibration points,
+    // then tick marks at each calibration value's predicted X pixel position
+    if (calX && state.axisX.length >= 2) {
+      // The X axis line runs horizontally at the average py of all X cal points
+      const axisYpx = state.axisX.reduce((s,p)=>s+p.py,0)/state.axisX.length;
+      const lineLeft  = imgToCanvas(0, axisYpx);
+      const lineRight = imgToCanvas(state.imgW, axisYpx);
+      mctx.save();
+      mctx.setLineDash([4,3]);
+      mctx.strokeStyle = 'rgba(42,82,152,0.55)';
+      mctx.lineWidth = 1.5;
+      mctx.beginPath(); mctx.moveTo(lineLeft.x, lineLeft.y); mctx.lineTo(lineRight.x, lineRight.y); mctx.stroke();
+      mctx.setLineDash([]);
+
+      // Generate a reasonable set of tick values to display
+      const xVals = state.axisX.map(p=>p.val);
+      const xMin = Math.min(...xVals), xMax = Math.max(...xVals);
+      let ticksX;
+      if (isLogX) {
+        const logMin=Math.floor(Math.log10(xMin)), logMax=Math.ceil(Math.log10(xMax));
+        ticksX=[];
+        for(let e=logMin;e<=logMax;e++) for(const m of[1,2,5]) {
+          const v=m*Math.pow(10,e); if(v>=xMin*0.5&&v<=xMax*1.5) ticksX.push(v);
+        }
+      } else {
+        const span = xMax - xMin;
+        const step = Math.pow(10, Math.floor(Math.log10(span/5)));
+        const t0 = Math.ceil(xMin/step)*step;
+        ticksX=[];
+        for(let v=t0; v<=xMax+step*0.01; v+=step) ticksX.push(parseFloat(v.toFixed(10)));
+      }
+
+      ticksX.forEach(tv => {
+        const xpx = dataToImgPx(tv, calX, isLogX);
+        if (xpx === null || xpx < -5 || xpx > state.imgW+5) return;
+        const c = imgToCanvas(xpx, axisYpx);
+        mctx.strokeStyle = 'rgba(42,82,152,0.7)'; mctx.lineWidth = 1.5;
+        mctx.beginPath(); mctx.moveTo(c.x, c.y-7); mctx.lineTo(c.x, c.y+7); mctx.stroke();
+        mctx.fillStyle = '#2a5298'; mctx.font = 'bold 9px monospace';
+        mctx.textAlign = 'center';
+        mctx.fillText(tv % 1 === 0 ? tv : tv.toPrecision(3), c.x, c.y + 18);
+      });
+      mctx.textAlign = 'left';
+      mctx.restore();
+    }
+
+    // Y axis overlay — vertical line at mean px of Y cal points, tick marks at predicted py
+    if (calY && state.axisY.length >= 2) {
+      const axisXpx = state.axisY.reduce((s,p)=>s+p.px,0)/state.axisY.length;
+      const lineTop    = imgToCanvas(axisXpx, 0);
+      const lineBottom = imgToCanvas(axisXpx, state.imgH);
+      mctx.save();
+      mctx.setLineDash([4,3]);
+      mctx.strokeStyle = 'rgba(139,32,32,0.55)';
+      mctx.lineWidth = 1.5;
+      mctx.beginPath(); mctx.moveTo(lineTop.x, lineTop.y); mctx.lineTo(lineBottom.x, lineBottom.y); mctx.stroke();
+      mctx.setLineDash([]);
+
+      const yVals = state.axisY.map(p=>p.val);
+      const yMin = Math.min(...yVals), yMax = Math.max(...yVals);
+      let ticksY;
+      if (isLogY) {
+        const logMin=Math.floor(Math.log10(yMin)), logMax=Math.ceil(Math.log10(yMax));
+        ticksY=[];
+        for(let e=logMin;e<=logMax;e++) for(const m of[1,2,5]) {
+          const v=m*Math.pow(10,e); if(v>=yMin*0.5&&v<=yMax*1.5) ticksY.push(v);
+        }
+      } else {
+        const span = yMax - yMin;
+        const step = Math.pow(10, Math.floor(Math.log10(span/5)));
+        const t0 = Math.ceil(yMin/step)*step;
+        ticksY=[];
+        for(let v=t0; v<=yMax+step*0.01; v+=step) ticksY.push(parseFloat(v.toFixed(10)));
+      }
+
+      ticksY.forEach(tv => {
+        const ypx = dataToImgPx(tv, calY, isLogY);
+        if (ypx === null || ypx < -5 || ypx > state.imgH+5) return;
+        const c = imgToCanvas(axisXpx, ypx);
+        mctx.strokeStyle = 'rgba(139,32,32,0.7)'; mctx.lineWidth = 1.5;
+        mctx.beginPath(); mctx.moveTo(c.x-7, c.y); mctx.lineTo(c.x+7, c.y); mctx.stroke();
+        mctx.fillStyle = '#8b2020'; mctx.font = 'bold 9px monospace';
+        mctx.textAlign = 'right';
+        mctx.fillText(tv % 1 === 0 ? tv : tv.toPrecision(3), c.x - 9, c.y + 3);
+      });
+      mctx.textAlign = 'left';
+      mctx.restore();
+    }
+  }
+
+  // ── Digitized curve points and connecting lines ──
+  state.curves.forEach((curve, ci) => {
+    if (curve.points.length > 1) {
+      mctx.beginPath();
+      curve.points.forEach((p, i) => {
+        const c = imgToCanvas(p.px, p.py);
+        i === 0 ? mctx.moveTo(c.x, c.y) : mctx.lineTo(c.x, c.y);
+      });
+      mctx.strokeStyle = curve.color + '80'; mctx.lineWidth = 1; mctx.stroke();
+    }
+    curve.points.forEach(p => {
+      dot(p.px, p.py, curve.color, null, ci === state.activeCurveIdx ? 4 : 3);
+    });
+    if (curve.tm !== null && curve.points.length >= 2) {
+      const xUnit = document.getElementById('x-unit').value || '°C';
+      const firstC = imgToCanvas(curve.points[0].px, curve.points[0].py);
+      mctx.fillStyle = curve.color; mctx.font = 'bold 11px monospace';
+      mctx.fillText('Tm=' + curve.tm.toFixed(1) + xUnit, firstC.x, firstC.y - 12);
+    }
+  });
+}
+
+// ─────────────────────────────────────────────
+// CANVAS EVENTS
+// ─────────────────────────────────────────────
+// Helper: convert a mouse event's CSS-space offset to canvas-resolution pixels
+function eventToCanvas(e) {
+  const rect = mainCanvas.getBoundingClientRect();
+  return {
+    cx: e.offsetX * (mainCanvas.width  / rect.width),
+    cy: e.offsetY * (mainCanvas.height / rect.height)
+  };
+}
+
+mainCanvas.addEventListener('mousedown', e => {
+  if (state.mode === 'pan') {
+    const {cx, cy} = eventToCanvas(e);
+    state.dragging = true; state.lastMx = cx; state.lastMy = cy;
+    mainCanvas.style.cursor = 'grabbing'; return;
+  }
+  const rawPt = canvasToImg(e.offsetX, e.offsetY);
+  const snapR = parseInt(document.getElementById('snap-radius').value)||8;
+
+  if (state.mode === 'axis-x') {
+    const val = parseFloat(document.getElementById('cal-x-pending').value);
+    if (isNaN(val)) { document.getElementById('cal-x-pending-hint').textContent='⚠ enter value first'; return; }
+    const snapped = snapToCentroid(rawPt.x, rawPt.y, snapR);
+    state.axisX.push({px: snapped.px, py: snapped.py, val});
+    document.getElementById('cal-x-pending').value = '';
+    document.getElementById('cal-x-pending-hint').textContent = 'click a point';
+
+  } else if (state.mode === 'axis-y') {
+    const val = parseFloat(document.getElementById('cal-y-pending').value);
+    if (isNaN(val)) { document.getElementById('cal-y-pending-hint').textContent='⚠ enter value first'; return; }
+    const snapped = snapToCentroid(rawPt.x, rawPt.y, snapR);
+    state.axisY.push({px: snapped.px, py: snapped.py, val});
+    document.getElementById('cal-y-pending').value = '';
+    document.getElementById('cal-y-pending-hint').textContent = 'click a point';
+
+  } else if (state.mode === 'points') {
+    if (!state.curves.length) addCurve();
+    const snapped = snapToCentroid(rawPt.x, rawPt.y, Math.min(snapR, 4));
+    const d = imgToData(snapped.px, snapped.py);
+    if (d) {
+      state.curves[state.activeCurveIdx].points.push({px: snapped.px, py: snapped.py, dataX: d.x, dataY: d.y});
+    }
+  }
+  updateCalStatus(); draw(); computeAll(); renderCurveList(); renderResults();
+});
+
+mainCanvas.addEventListener('mousemove', e => {
+  if (state.mode === 'pan' && state.dragging) {
+    const {cx, cy} = eventToCanvas(e);
+    state.offsetX -= (cx - state.lastMx) / state.zoom;
+    state.offsetY -= (cy - state.lastMy) / state.zoom;
+    state.lastMx = cx; state.lastMy = cy;
+    draw(); return;
+  }
+  const rawPt = canvasToImg(e.offsetX, e.offsetY);
+  const d = imgToData(rawPt.x, rawPt.y);
+  const xUnit = document.getElementById('x-unit').value || '°C';
+  if (d) document.getElementById('coord-display').textContent = `T=${d.x.toFixed(2)}${xUnit}  A=${d.y.toFixed(4)}`;
+  else document.getElementById('coord-display').textContent = `px=(${rawPt.x.toFixed(0)}, ${rawPt.y.toFixed(0)})`;
+
+  // Show snap preview when in calibration modes, and cursor dot in digitize mode
+  if (state.img) {
+    draw(); // redraw cleanly first
+    const {cx: curCx, cy: curCy} = eventToCanvas(e);
+
+    if (state.mode === 'axis-x' || state.mode === 'axis-y') {
+      const snapR = parseInt(document.getElementById('snap-radius').value)||8;
+      const snapped = snapToCentroid(rawPt.x, rawPt.y, snapR);
+      const sc = imgToCanvas(snapped.px, snapped.py);
+      // Snap search radius circle in canvas pixels
+      const snapRadiusCanvas = snapR * state.displayScale * state.zoom;
+      mctx.beginPath(); mctx.arc(curCx, curCy, snapRadiusCanvas, 0, Math.PI*2);
+      mctx.strokeStyle='rgba(80,130,220,0.35)'; mctx.lineWidth=1; mctx.stroke();
+      // Snapped centroid crosshair
+      mctx.beginPath(); mctx.arc(sc.x, sc.y, 4, 0, Math.PI*2);
+      mctx.strokeStyle='#2a5298'; mctx.lineWidth=2; mctx.stroke();
+      mctx.beginPath();
+      mctx.moveTo(sc.x-7, sc.y); mctx.lineTo(sc.x+7, sc.y);
+      mctx.moveTo(sc.x, sc.y-7); mctx.lineTo(sc.x, sc.y+7);
+      mctx.strokeStyle='#2a5298'; mctx.lineWidth=1.5; mctx.stroke();
+    } else if (state.mode === 'points') {
+      // Show a dot at the exact cursor position (snapped if snap on) so user
+      // sees precisely where the click will register
+      const snapR = Math.min(parseInt(document.getElementById('snap-radius').value)||8, 4);
+      const snapped = snapToCentroid(rawPt.x, rawPt.y, snapR);
+      const sc = imgToCanvas(snapped.px, snapped.py);
+      const activeColor = state.curves[state.activeCurveIdx]?.color || '#1a5c35';
+      mctx.beginPath(); mctx.arc(sc.x, sc.y, 5, 0, Math.PI*2);
+      mctx.strokeStyle = activeColor; mctx.lineWidth = 2; mctx.stroke();
+      mctx.beginPath();
+      mctx.moveTo(sc.x-8, sc.y); mctx.lineTo(sc.x+8, sc.y);
+      mctx.moveTo(sc.x, sc.y-8); mctx.lineTo(sc.x, sc.y+8);
+      mctx.strokeStyle = activeColor; mctx.lineWidth = 1; mctx.stroke();
+    }
+  }
+});
+
+mainCanvas.addEventListener('mouseup', () => { state.dragging = false; if (state.mode==='pan') mainCanvas.style.cursor='grab'; });
+mainCanvas.addEventListener('mouseleave', () => { state.dragging = false; if (state.img) draw(); });
+
+// Zoom scroll
+mainCanvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const factor = e.deltaY < 0 ? 1.1 : 0.91;
+  const newZoom = Math.min(8, Math.max(1, state.zoom * factor));
+  const {cx, cy} = eventToCanvas(e);
+  // cx,cy are canvas-resolution pixels; offsetX/Y is stored in displayScale-pixels
+  // so we work entirely in canvas-resolution space: offsetX * zoom = screen pos
+  state.offsetX = state.offsetX + cx/state.zoom - cx/newZoom;
+  state.offsetY = state.offsetY + cy/state.zoom - cy/newZoom;
+  state.zoom = newZoom;
+  document.getElementById('zoom-slider').value = newZoom;
+  document.getElementById('zoom-val').textContent = newZoom.toFixed(1) + '×';
+  draw();
+}, { passive: false });
+
+// ─────────────────────────────────────────────
+// MODE BUTTONS
+// ─────────────────────────────────────────────
+const HINTS = {
+  'axis-x': 'Type a tick value in the X axis field, then click the corresponding tick mark on the image. Repeat for each tick. More points = better calibration.',
+  'axis-y': 'Type a tick value in the Y axis field, then click the corresponding tick mark on the image. Repeat for each tick.',
+  'points': 'Click along the active curve to digitize it. Switch curves in the Curves panel.',
+  'pan': 'Click and drag to pan. Scroll to zoom.'
+};
+
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    state.mode = btn.dataset.mode;
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b===btn));
+    document.getElementById('mode-hint').textContent = HINTS[state.mode];
+    mainCanvas.style.cursor = state.mode === 'pan' ? 'grab' : 'crosshair';
+  });
+});
+
+// ─────────────────────────────────────────────
+// ZOOM SLIDER
+// ─────────────────────────────────────────────
+document.getElementById('zoom-slider').oninput = function() {
+  state.zoom = parseFloat(this.value);
+  document.getElementById('zoom-val').textContent = state.zoom.toFixed(1) + '×';
+  draw();
+};
+document.getElementById('btn-reset-view').onclick = () => {
+  state.zoom = 1; state.offsetX = 0; state.offsetY = 0;
+  document.getElementById('zoom-slider').value = 1;
+  document.getElementById('zoom-val').textContent = '1.0×';
+  draw();
+};
+
+// ─────────────────────────────────────────────
+// SMOOTH SLIDER
+// ─────────────────────────────────────────────
+document.getElementById('smooth-slider').oninput = function() {
+  state.smoothK = parseInt(this.value);
+  document.getElementById('smooth-val').textContent = this.value;
+  computeAll(); renderResults(); renderCharts();
+};
+
+// ─────────────────────────────────────────────
+// CALIBRATION STATUS + LIST RENDERING
+// ─────────────────────────────────────────────
+function renderCalList(arr, listId, statusId, r2Id, axis) {
+  const list = document.getElementById(listId);
+  const status = document.getElementById(statusId);
+  const r2el = document.getElementById(r2Id);
+  list.innerHTML = '';
+  arr.forEach((p,i)=>{
+    const row = document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;gap:4px;margin-bottom:3px';
+    row.innerHTML=`
+      <div style="width:8px;height:8px;border-radius:50%;background:${axis==='x'?'#2a5298':'#8b2020'};flex-shrink:0"></div>
+      <span style="font-family:var(--mono);font-size:10px;flex:1;color:var(--text-2)">${p.val} → px(${p.px.toFixed(1)},${p.py.toFixed(1)})</span>
+      <button data-idx="${i}" style="background:none;border:none;color:var(--text-3);cursor:pointer;font-size:11px;padding:0 2px;line-height:1" title="Remove">×</button>
+    `;
+    row.querySelector('button').onclick=()=>{
+      arr.splice(i,1); updateCalStatus(); draw(); computeAll();
+      state.curves.forEach(c=>{ if(c.points.length){
+        c.points.forEach(pt=>{const dd=imgToData(pt.px,pt.py);if(dd){pt.dataX=dd.x;pt.dataY=dd.y;}});
+      }}); computeAll(); renderResults(); renderCharts();
+    };
+    list.appendChild(row);
+  });
+  const n = arr.length;
+  if(n===0) { status.textContent='0 points — need ≥ 2'; r2el.textContent=''; return; }
+  if(n===1) { status.textContent='1 point — need ≥ 2 more'; r2el.textContent=''; return; }
+  const isLog = axis==='x' ? getScaleX() : getScaleY();
+  const pxVals = arr.map(p=>axis==='x'?p.px:p.py);
+  const tvVals = arr.map(p=>scaleVal(p.val,isLog));
+  if (tvVals.some(v=>v===null)) {
+    status.innerHTML=`<span style="color:var(--danger)">${n} points — invalid for log scale</span>`;
+    r2el.textContent='Remove values ≤ 0 to use log scale'; return;
+  }
+  const reg = linReg(pxVals, tvVals);
+  const scaleLabel = isLog ? ' (log₁₀ fit)' : '';
+  status.innerHTML=`<span style="color:var(--success)">${n} points ✓</span>${scaleLabel}`;
+  r2el.textContent = reg ? `R² = ${reg.r2.toFixed(5)}  (1.0 = perfect)` : '';
+}
+
+function updateCalStatus() {
+  renderCalList(state.axisX,'cal-x-list','cal-x-status','cal-x-r2','x');
+  renderCalList(state.axisY,'cal-y-list','cal-y-status','cal-y-r2','y');
+  checkScaleWarnings();
+  const xi = document.getElementById('cal-x-pending-hint');
+  const yi = document.getElementById('cal-y-pending-hint');
+  if(xi && !xi.textContent.startsWith('⚠')) xi.textContent = state.axisX.length===0?'click a point':'add more ticks';
+  if(yi && !yi.textContent.startsWith('⚠')) yi.textContent = state.axisY.length===0?'click a point':'add more ticks';
+}
+
+document.getElementById('btn-clear-axis').onclick = () => {
+  state.axisX=[]; state.axisY=[]; updateCalStatus(); draw();
+};
+
+// Scale selectors — recompute everything when changed
+['x-scale','y-scale'].forEach(id => {
+  document.getElementById(id).addEventListener('change', () => {
+    updateCalStatus(); draw();
+    // Recompute all curve data values since the calibration mapping changed
+    state.curves.forEach(c => {
+      c.points.forEach(pt => {
+        const dd = imgToData(pt.px, pt.py);
+        if (dd) { pt.dataX = dd.x; pt.dataY = dd.y; }
+      });
+    });
+    computeAll(); renderResults(); renderCharts();
+  });
+});
+
+// Show/hide axis overlay
+document.getElementById('show-axis-overlay').addEventListener('change', () => draw());
+
+// Snap controls
+document.getElementById('snap-radius').oninput=function(){
+  document.getElementById('snap-radius-val').textContent=this.value;
+};
+
+// When pending value typed, clear the warning
+['cal-x-pending','cal-y-pending'].forEach(id=>{
+  document.getElementById(id).addEventListener('input',()=>{
+    const hint=document.getElementById(id.replace('pending','pending-hint'));
+    if(hint.textContent.startsWith('⚠')) hint.textContent='click a point';
+  });
+});
+
+// ─────────────────────────────────────────────
+// CURVES
+// ─────────────────────────────────────────────
+function addCurve() {
+  const idx = state.curves.length;
+  state.curves.push(newCurve(idx));
+  state.activeCurveIdx = idx;
+  renderCurveList();
+  updateActiveBadge();
+}
+
+function renderCurveList() {
+  const list = document.getElementById('curve-list');
+  list.innerHTML = '';
+  state.curves.forEach((c,i) => {
+    const div = document.createElement('div');
+    div.className = 'curve-item' + (i===state.activeCurveIdx?' active':'');
+    div.innerHTML = `
+      <div class="curve-item-header">
+        <div class="curve-swatch" style="background:${c.color}"></div>
+        <input class="curve-name-input" value="${c.name}" data-idx="${i}" placeholder="Curve name">
+        <button class="curve-del" data-idx="${i}" title="Delete curve">×</button>
+      </div>
+      <div style="margin-top:5px">
+        <div style="font-size:10px;color:var(--text-3);font-family:var(--mono);margin-bottom:2px">Sample / condition label</div>
+        <input class="curve-label-input" value="${c.label||''}" data-idx="${i}" placeholder="e.g. WT 100mM NaCl" style="width:100%;font-family:var(--mono);font-size:11px;background:transparent;border:none;border-bottom:1px solid var(--border-light);outline:none;color:var(--text);padding:1px 0;">
+      </div>
+      <div style="margin-top:4px;display:flex;gap:8px">
+        <span class="curve-pts">${c.points.length} pts</span>
+        <span class="curve-tm">${c.tm!==null ? 'Tm = '+c.tm.toFixed(2)+' '+(document.getElementById('x-unit').value||'°C') : '—'}</span>
+      </div>
+    `;
+    div.addEventListener('click', e => {
+      if (e.target.classList.contains('curve-del') || e.target.classList.contains('curve-name-input') || e.target.classList.contains('curve-label-input')) return;
+      state.activeCurveIdx = i; renderCurveList(); updateActiveBadge(); draw();
+    });
+    div.querySelector('.curve-name-input').addEventListener('change', e => {
+      state.curves[i].name = e.target.value; renderCurveList(); renderResults(); renderCharts();
+    });
+    div.querySelector('.curve-label-input').addEventListener('change', e => {
+      state.curves[i].label = e.target.value; renderResults();
+    });
+    div.querySelector('.curve-label-input').addEventListener('click', e => e.stopPropagation());
+    div.querySelector('.curve-del').addEventListener('click', () => {
+      state.curves.splice(i,1);
+      state.activeCurveIdx = Math.max(0, state.activeCurveIdx-1);
+      renderCurveList(); updateActiveBadge(); draw(); computeAll(); renderResults(); renderCharts();
+    });
+    list.appendChild(div);
+  });
+}
+
+function updateActiveBadge() {
+  const badge = document.getElementById('active-curve-badge');
+  if (!state.curves.length) { badge.style.display='none'; return; }
+  const c = state.curves[state.activeCurveIdx];
+  badge.style.display='inline-block';
+  badge.textContent = '● ' + c.name;
+  badge.style.background = c.color + '20';
+  badge.style.color = c.color;
+  badge.style.border = '1px solid ' + c.color + '60';
+}
+
+document.getElementById('btn-add-curve').onclick = () => { addCurve(); updateActiveBadge(); };
+document.getElementById('btn-clear-curve-pts').onclick = () => {
+  if (!state.curves.length) return;
+  state.curves[state.activeCurveIdx].points = [];
+  renderCurveList(); draw(); computeAll(); renderResults(); renderCharts();
+};
+document.getElementById('btn-undo').onclick = () => {
+  if (state.mode==='axis-x' && state.axisX.length) state.axisX.pop();
+  else if (state.mode==='axis-y' && state.axisY.length) state.axisY.pop();
+  else if (state.mode==='points' && state.curves.length && state.curves[state.activeCurveIdx].points.length)
+    state.curves[state.activeCurveIdx].points.pop();
+  updateCalStatus(); draw(); computeAll(); renderCurveList(); renderResults(); renderCharts();
+};
+
+// ─────────────────────────────────────────────
+// LOESS SMOOTHER + DERIVATIVE
+// ─────────────────────────────────────────────
+function loess(xs, ys, bw) {
+  const n = xs.length, out = new Array(n);
+  for (let i=0; i<n; i++) {
+    let sw=0,swy=0,swxy=0,swx2=0,swx=0;
+    const halfW = Math.max(bw, 1);
+    const jlo = Math.max(0,i-halfW), jhi = Math.min(n,i+halfW+1);
+    const maxD = Math.max(...xs.slice(jlo,jhi).map(x=>Math.abs(x-xs[i])));
+    for (let j=jlo; j<jhi; j++) {
+      const u = (maxD>0) ? Math.abs(xs[j]-xs[i])/maxD : 0;
+      const w = u<1 ? Math.pow(1-u*u*u,3) : 0;
+      sw+=w; swx+=w*xs[j]; swx2+=w*xs[j]*xs[j]; swy+=w*ys[j]; swxy+=w*xs[j]*ys[j];
+    }
+    const det = sw*swx2 - swx*swx;
+    if (Math.abs(det)<1e-14) { out[i]=sw>0?swy/sw:ys[i]; continue; }
+    const b0=(swy*swx2-swxy*swx)/det, b1=(sw*swxy-swx*swy)/det;
+    out[i]=b0+b1*xs[i];
+  }
+  return out;
+}
+
+function computeCurve(curve) {
+  const pts = curve.points.filter(p=>!isNaN(p.dataX)&&!isNaN(p.dataY));
+  if (pts.length < 4) { curve.tm=null; curve.smoothed=[]; curve.deriv=[]; curve.derivXs=[]; return; }
+  pts.sort((a,b)=>a.dataX-b.dataX);
+  const xs=pts.map(p=>p.dataX), ys=pts.map(p=>p.dataY);
+  const sm = loess(xs,ys,state.smoothK);
+  const deriv=[], derivXs=[];
+  for (let i=1;i<xs.length-1;i++) {
+    deriv.push((sm[i+1]-sm[i-1])/(xs[i+1]-xs[i-1]));
+    derivXs.push(xs[i]);
+  }
+  let maxIdx=0;
+  for (let i=1;i<deriv.length;i++) if(Math.abs(deriv[i])>Math.abs(deriv[maxIdx])) maxIdx=i;
+  curve.smoothed=sm; curve.deriv=deriv; curve.derivXs=derivXs;
+  curve._sortedXs=xs; curve._sortedYs=ys;
+  curve.tm = derivXs.length ? derivXs[maxIdx] : null;
+  curve.maxDeriv = deriv.length ? deriv[maxIdx] : null;
+}
+
+function computeAll() {
+  state.curves.forEach(computeCurve);
+}
+
+// ─────────────────────────────────────────────
+// RESULTS PANEL
+// ─────────────────────────────────────────────
+function renderResults() {
+  const el = document.getElementById('results-list');
+  const xUnit = document.getElementById('x-unit').value||'°C';
+  const yLabel = document.getElementById('y-label').value||'Absorbance';
+  const ready = state.curves.filter(c=>c.tm!==null);
+  if (!ready.length) { el.innerHTML='<small>Digitize at least 4 points on a curve.</small>'; return; }
+  el.innerHTML = ready.map(c=>`
+    <div class="result-card">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <div style="width:10px;height:10px;border-radius:2px;background:${c.color}"></div>
+        <span class="mono" style="font-size:11px;font-weight:500">${c.name}</span>
+        <span class="tag tag-info" style="margin-left:auto">${c.points.length} pts</span>
+      </div>
+      ${c.label ? `<div style="font-size:10px;color:var(--text-2);font-family:var(--mono);margin-bottom:6px;font-style:italic">${c.label}</div>` : ''}
+      <div class="result-label">Tm (max gradient)</div>
+      <div class="result-big">${c.tm.toFixed(3)} <span style="font-size:14px;color:var(--text-2)">${xUnit}</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">
+        <div><div class="result-label">max d${yLabel}/dT</div><div class="mono" style="font-size:13px">${c.maxDeriv.toFixed(5)}</div></div>
+        <div><div class="result-label">Smoothing k</div><div class="mono" style="font-size:13px">${state.smoothK}</div></div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ─────────────────────────────────────────────
+// CHARTS
+// ─────────────────────────────────────────────
+function destroyChart(id) { if(state.charts[id]) { state.charts[id].destroy(); delete state.charts[id]; } }
+
+function renderCharts() {
+  const xUnit = document.getElementById('x-unit').value||'°C';
+  const yLabel = document.getElementById('y-label').value||'Absorbance';
+  const ready = state.curves.filter(c=>c.tm!==null && c._sortedXs);
+  document.getElementById('chart-panel').style.display = ready.length ? 'block' : 'none';
+  if (!ready.length) return;
+
+  // ── Combined smoothed
+  destroyChart('combined');
+  const dsSmooth = ready.map(c=>({
+    type:'line', label:c.name,
+    data: c._sortedXs.map((x,i)=>({x,y:c.smoothed[i]})),
+    borderColor:c.color, borderWidth:2, pointRadius:0, tension:0.3
+  }));
+  const dsRaw = ready.map(c=>({
+    type:'scatter', label:c.name+' (raw)',
+    data: c._sortedXs.map((x,i)=>({x,y:c._sortedYs[i]})),
+    backgroundColor:c.color+'50', pointRadius:2, showLine:false
+  }));
+  state.charts.combined = new Chart(document.getElementById('chart-combined').getContext('2d'),{
+    data:{ datasets:[...dsSmooth,...dsRaw] },
+    options:{ responsive:true, maintainAspectRatio:false, animation:false,
+      plugins:{ legend:{display:false} },
+      scales:{
+        x:{type:'linear',title:{display:true,text:'Temperature ('+xUnit+')',font:{size:10}},ticks:{font:{size:9}}},
+        y:{title:{display:true,text:yLabel,font:{size:10}},ticks:{font:{size:9}}}
+      }
+    }
+  });
+
+  // ── Derivative
+  destroyChart('deriv');
+  const dsD = ready.map(c=>({
+    type:'line', label:c.name,
+    data: c.derivXs.map((x,i)=>({x,y:c.deriv[i]})),
+    borderColor:c.color, borderWidth:2, pointRadius:0, borderDash:[4,3], tension:0.3
+  }));
+  const annotations = {};
+  ready.forEach((c,i)=>{ annotations['tm'+i]={ type:'line', xMin:c.tm, xMax:c.tm, borderColor:c.color+'90', borderWidth:1, borderDash:[2,2] }; });
+  state.charts.deriv = new Chart(document.getElementById('chart-deriv').getContext('2d'),{
+    data:{ datasets:dsD },
+    options:{ responsive:true, maintainAspectRatio:false, animation:false,
+      plugins:{ legend:{display:false} },
+      scales:{
+        x:{type:'linear',title:{display:true,text:'Temperature ('+xUnit+')',font:{size:10}},ticks:{font:{size:9}}},
+        y:{title:{display:true,text:'d'+yLabel+'/dT',font:{size:10}},ticks:{font:{size:9}}}
+      }
+    }
+  });
+
+  // ── Full deriv tab
+  destroyChart('deriv2');
+  state.charts.deriv2 = new Chart(document.getElementById('chart-deriv2').getContext('2d'),{
+    data:{ datasets:ready.map(c=>({
+      type:'line', label:c.name,
+      data: c.derivXs.map((x,i)=>({x,y:c.deriv[i]})),
+      borderColor:c.color, borderWidth:2, pointRadius:0, borderDash:[5,3], tension:0.3
+    })) },
+    options:{ responsive:true, maintainAspectRatio:false, animation:false,
+      plugins:{ legend:{display:true, labels:{font:{size:10}, boxWidth:10} } },
+      scales:{
+        x:{type:'linear',title:{display:true,text:'Temperature ('+xUnit+')',font:{size:11}},ticks:{font:{size:10}}},
+        y:{title:{display:true,text:'d'+yLabel+'/dT',font:{size:11}},ticks:{font:{size:10}}}
+      }
+    }
+  });
+
+  // ── Data table
+  renderDataTable(ready, xUnit, yLabel);
+}
+
+function renderDataTable(curves, xUnit, yLabel) {
+  const allX = [...new Set(curves.flatMap(c=>c._sortedXs))].sort((a,b)=>a-b);
+  let html = `<table style="border-collapse:collapse;width:100%"><thead><tr>
+    <th style="text-align:left;padding:2px 6px;border-bottom:1px solid var(--border);color:var(--text-2)">T (${xUnit})</th>
+    ${curves.map(c=>`<th style="padding:2px 6px;border-bottom:1px solid var(--border);color:${c.color}">${c.name}</th>`).join('')}
+  </tr></thead><tbody>`;
+  curves.forEach(c=>{
+    c._sortedXs.forEach((x,i)=>{
+      html += `<tr><td style="padding:2px 6px;border-bottom:1px solid var(--border-light)">${x.toFixed(3)}</td>`;
+      // find matching
+      curves.forEach(c2=>{
+        const idx2 = c2._sortedXs.indexOf(x);
+        html += `<td style="padding:2px 6px;border-bottom:1px solid var(--border-light);text-align:right">${idx2>=0?c2.smoothed[idx2].toFixed(4):''}</td>`;
+      });
+      html += '</tr>';
+    });
+  });
+  html += '</tbody></table>';
+  document.getElementById('data-table-container').innerHTML = html;
+}
+
+// ─────────────────────────────────────────────
+// TABS
+// ─────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t===tab));
+    document.querySelectorAll('.tab-content').forEach(c=>c.style.display='none');
+    document.getElementById('tab-'+tab.dataset.tab).style.display='block';
+    if(tab.dataset.tab!=='combined') renderCharts(); // re-render to get correct size
+  });
+});
+
+// ─────────────────────────────────────────────
+// EXPORT
+// ─────────────────────────────────────────────
+document.getElementById('btn-export-all').onclick = exportSession;
+
+async function exportSession() {
+  const xUnit = document.getElementById('x-unit').value||'°C';
+  const yLabel = document.getElementById('y-label').value||'Absorbance';
+  const imgLabel = document.getElementById('img-label').value||'image';
+  const notes = document.getElementById('img-notes').value||'';
+  const timestamp = new Date().toISOString();
+
+  const sessionData = {
+    format_version: '2.0',
+    software: 'Tm Extractor v2',
+    exported: timestamp,
+    method: {
+      description: 'Absorbance-vs-temperature curve digitized from image by manual point selection. Tm determined as the temperature of maximum absolute gradient (dA/dT) computed from a LOESS-smoothed curve.',
+      smoothing_algorithm: 'LOESS (locally estimated scatterplot smoothing)',
+      smoothing_bandwidth_k: state.smoothK,
+      tm_definition: 'Temperature at which |dA/dT| is maximised (inflection point of absorbance sigmoid)',
+      derivative_method: 'Central finite differences on LOESS-smoothed data',
+      calibration: {
+        x_axis: {
+          unit: xUnit,
+          scale: document.getElementById('x-scale').value,
+          n_points: state.axisX.length,
+          regression: (()=>{const r=getCalX();return r?{slope:parseFloat(r.slope.toFixed(8)),intercept:parseFloat(r.intercept.toFixed(4)),r2:parseFloat(r.r2.toFixed(6)),fit_space:getScaleX()?'log10':'linear'}:null;})(),
+          pixel_points: state.axisX.map(p=>({
+            pixel_x: parseFloat(p.px.toFixed(3)),
+            pixel_y: parseFloat(p.py.toFixed(3)),
+            real_value: p.val
+          })),
+        },
+        y_axis: {
+          label: yLabel,
+          scale: document.getElementById('y-scale').value,
+          n_points: state.axisY.length,
+          regression: (()=>{const r=getCalY();return r?{slope:parseFloat(r.slope.toFixed(8)),intercept:parseFloat(r.intercept.toFixed(4)),r2:parseFloat(r.r2.toFixed(6)),fit_space:getScaleY()?'log10':'linear'}:null;})(),
+          pixel_points: state.axisY.map(p=>({
+            pixel_x: parseFloat(p.px.toFixed(3)),
+            pixel_y: parseFloat(p.py.toFixed(3)),
+            real_value: p.val
+          }))
+        }
+      }
+    },
+    image: {
+      label: imgLabel,
+      notes: notes,
+      original_width_px: state.imgW,
+      original_height_px: state.imgH,
+    },
+    curves: state.curves.map(c=>{
+      const pts = c.points.filter(p=>!isNaN(p.dataX));
+      pts.sort((a,b)=>a.dataX-b.dataX);
+      const derivData = c.derivXs.map((x,i)=>({
+        T: parseFloat(x.toFixed(4)),
+        dA_dT: parseFloat(c.deriv[i].toFixed(6))
+      }));
+      return {
+        name: c.name,
+        label: c.label || '',
+        color: c.color,
+        tm_result: {
+          Tm: c.tm!==null ? parseFloat(c.tm.toFixed(4)) : null,
+          Tm_unit: xUnit,
+          max_dA_dT: c.maxDeriv!==null ? parseFloat(c.maxDeriv.toFixed(6)) : null,
+        },
+        n_points: pts.length,
+        raw_points: pts.map(p=>({
+          pixel_x: parseFloat(p.px.toFixed(3)),
+          pixel_y: parseFloat(p.py.toFixed(3)),
+          [xUnit]: parseFloat(p.dataX.toFixed(4)),
+          [yLabel]: parseFloat(p.dataY.toFixed(5))
+        })),
+        smoothed_curve: c._sortedXs ? c._sortedXs.map((x,i)=>({
+          [xUnit]: parseFloat(x.toFixed(4)),
+          [`${yLabel}_smooth`]: parseFloat(c.smoothed[i].toFixed(5))
+        })) : [],
+        derivative: derivData
+      };
+    })
+  };
+
+  const zip = new JSZip();
+  zip.file('session.json', JSON.stringify(sessionData, null, 2));
+  if (state.imgDataUrl) zip.file('image_' + imgLabel.replace(/\s/g,'_') + '.png', state.imgDataUrl.split(',')[1], {base64:true});
+
+  // Per-curve CSVs
+  state.curves.forEach(c=>{
+    if (!c._sortedXs || !c._sortedXs.length) return;
+    const pts = c.points.filter(p=>!isNaN(p.dataX)); pts.sort((a,b)=>a.dataX-b.dataX);
+    let csv = `# Tm Extractor — ${c.name}\n`;
+    csv += `# Label: ${c.label||'(none)'}\n`;
+    csv += `# Exported: ${timestamp}\n`;
+    csv += `# Tm = ${c.tm!==null?c.tm.toFixed(4):'N/A'} ${xUnit}\n`;
+    csv += `# Smoothing bandwidth k = ${state.smoothK}\n`;
+    csv += `# Method: LOESS smooth + central finite difference derivative\n`;
+    csv += `T_${xUnit},${yLabel}_raw,${yLabel}_smooth,d${yLabel}_dT\n`;
+    c._sortedXs.forEach((x,i)=>{
+      const dIdx = c.derivXs.indexOf(x);
+      csv += [x.toFixed(4), c._sortedYs[i].toFixed(5), c.smoothed[i].toFixed(5), dIdx>=0?c.deriv[dIdx].toFixed(6):''].join(',') + '\n';
+    });
+    csv += `\n# Tm,${c.tm!==null?c.tm.toFixed(4):'N/A'}\n`;
+    csv += `# max_d${yLabel}_dT,${c.maxDeriv!==null?c.maxDeriv.toFixed(6):'N/A'}\n`;
+    zip.file('curve_' + c.name.replace(/\s/g,'_') + '.csv', csv);
+  });
+
+  // Summary CSV
+  const xU = xUnit;
+  let sumcsv = `# Tm Extractor — Summary\n# Exported: ${timestamp}\n# Image: ${imgLabel}\n`;
+  sumcsv += `Curve,Label,n_points,Tm_${xU},max_dA_dT,smoothing_k\n`;
+  state.curves.forEach(c=>{
+    sumcsv += [c.name, c.label||'', c.points.length, c.tm!==null?c.tm.toFixed(4):'N/A', c.maxDeriv!==null?c.maxDeriv.toFixed(6):'N/A', state.smoothK].join(',') + '\n';
+  });
+  zip.file('summary.csv', sumcsv);
+
+  // Method readme
+  const readme = `Tm Extractor — Method Documentation
+=====================================
+Exported: ${timestamp}
+Image: ${imgLabel}
+
+HOW Tm WAS DETERMINED
+---------------------
+1. The absorbance-vs-temperature curve was manually digitized from the image by clicking
+   points along the curve. Pixel coordinates were calibrated to real units using two
+   reference points on each axis.
+
+2. The raw digitized points were smoothed using LOESS (locally estimated scatterplot
+   smoothing) with bandwidth parameter k = ${state.smoothK}. A larger k gives a smoother
+   fit; a smaller k follows the raw data more closely.
+
+3. The first derivative dA/dT was computed at each interior point using central finite
+   differences applied to the LOESS-smoothed curve:
+       dA/dT(i) = [A_smooth(i+1) - A_smooth(i-1)] / [T(i+1) - T(i-1)]
+
+4. Tm is defined as the temperature at which |dA/dT| is maximised — the inflection
+   point of the sigmoidal absorbance transition.
+
+REPRODUCIBILITY
+---------------
+All digitized pixel coordinates, axis calibration points, smoothing parameter, smoothed
+curve values, and derivative values are stored in session.json and the per-curve CSV
+files. A different analyst loading session.json with the same k value will obtain an
+identical Tm.
+
+AXIS CALIBRATION
+----------------
+Method: multi-point linear regression (pixel coordinate → data value).
+Each axis tick mark was clicked with centroid snapping enabled (snap radius = ${document.getElementById('snap-radius').value} px).
+Centroid snapping finds the intensity-weighted centre of dark pixels within the
+snap radius, removing ambiguity from thick tick marks.
+A least-squares linear regression is then fitted through all calibration points;
+the resulting slope and intercept are used for all pixel→data conversions.
+
+X axis (${xUnit}, ${document.getElementById('x-scale').value} scale) — ${state.axisX.length} calibration points, R² = ${(()=>{const r=getCalX();return r?r.r2.toFixed(6):'N/A';})()}:
+${state.axisX.map((p,i)=>`  Point ${i+1}: pixel_x=${p.px.toFixed(1)}, pixel_y=${p.py.toFixed(1)} → ${p.val} ${xUnit}`).join('\n')||'  (none)'}
+
+Y axis (${yLabel}, ${document.getElementById('y-scale').value} scale) — ${state.axisY.length} calibration points, R² = ${(()=>{const r=getCalY();return r?r.r2.toFixed(6):'N/A';})()}:
+${state.axisY.map((p,i)=>`  Point ${i+1}: pixel_x=${p.px.toFixed(1)}, pixel_y=${p.py.toFixed(1)} → ${p.val}`).join('\n')||'  (none)'}
+
+RESULTS SUMMARY
+---------------
+${state.curves.map(c=>`${c.name}${c.label?' ('+c.label+')':''}: Tm = ${c.tm!==null?c.tm.toFixed(3):'N/A'} ${xU}, max dA/dT = ${c.maxDeriv!==null?c.maxDeriv.toFixed(5):'N/A'}, n = ${c.points.length} pts`).join('\n')}
+`;
+  zip.file('METHOD.txt', readme);
+
+  const blob = await zip.generateAsync({type:'blob'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'tm_session_' + imgLabel.replace(/\s/g,'_') + '_' + timestamp.slice(0,10) + '.zip';
+  a.click();
+}
+
+// ─────────────────────────────────────────────
+// SESSION LOAD
+// ─────────────────────────────────────────────
+document.getElementById('btn-load-session').onclick = () => document.getElementById('session-load-input').click();
+document.getElementById('session-load-input').onchange = async function() {
+  const f = this.files[0]; if(!f) return;
+  // If it's a zip, try to read session.json from it; if json, load directly
+  if (f.name.endsWith('.zip')) {
+    const zip = await JSZip.loadAsync(await f.arrayBuffer());
+    const jsonFile = zip.file('session.json');
+    if (!jsonFile) { alert('No session.json found in zip.'); return; }
+    const text = await jsonFile.text();
+    const session = JSON.parse(text);
+    loadSession(session, zip);
+  } else {
+    const text = await f.text();
+    loadSession(JSON.parse(text), null);
+  }
+};
+
+async function loadSession(session, zip) {
+  if (!session.curves) { alert('Invalid session file.'); return; }
+  const xUnit = session.method?.calibration?.x_axis?.unit || '°C';
+  const yLabel = session.method?.calibration?.y_axis?.label || 'Absorbance';
+  document.getElementById('x-unit').value = xUnit;
+  document.getElementById('y-label').value = yLabel;
+  if (session.image) {
+    document.getElementById('img-label').value = session.image.label || '';
+    document.getElementById('img-notes').value = session.image.notes || '';
+  }
+  const cal = session.method?.calibration;
+  if (cal) {
+    state.axisX = (cal.x_axis?.pixel_points||[]).map(p=>({px:p.pixel_x, py:p.pixel_y, val:p.real_value}));
+    state.axisY = (cal.y_axis?.pixel_points||[]).map(p=>({px:p.pixel_x, py:p.pixel_y, val:p.real_value}));
+    if (cal.x_axis?.scale) document.getElementById('x-scale').value = cal.x_axis.scale;
+    if (cal.y_axis?.scale) document.getElementById('y-scale').value = cal.y_axis.scale;
+  }
+  state.smoothK = session.method?.smoothing_bandwidth_k || 10;
+  document.getElementById('smooth-slider').value = state.smoothK;
+  document.getElementById('smooth-val').textContent = state.smoothK;
+
+  state.curves = session.curves.map((cd,i)=>({
+    id: Date.now()+i, name: cd.name, label: cd.label||'', color: cd.color||COLORS[i%COLORS.length],
+    points: (cd.raw_points||[]).map(p=>({
+      px:p.pixel_x, py:p.pixel_y, dataX:p[xUnit]||p.T, dataY:p[yLabel]||p.Absorbance
+    })),
+    tm:null, smoothed:[], deriv:[], derivXs:[]
+  }));
+  state.activeCurveIdx = 0;
+
+  // Load image from zip
+  if (zip) {
+    const imgFiles = Object.keys(zip.files).filter(n=>n.startsWith('image_'));
+    if (imgFiles.length) {
+      const imgData = await zip.file(imgFiles[0]).async('base64');
+      const ext = imgFiles[0].split('.').pop();
+      loadImageSrc('data:image/'+ext+';base64,'+imgData);
+    }
+  }
+  updateCalStatus(); computeAll(); renderCurveList(); updateActiveBadge(); renderResults(); renderCharts(); draw();
+  alert('Session loaded! ' + state.curves.length + ' curve(s) restored.');
+}
+
+// ─────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────
+addCurve();
+updateCalStatus();
+renderCurveList();
+updateActiveBadge();
+
+// Keep canvas sized to its container on resize
+window.addEventListener('resize', () => {
+  if (!state.img) return;
+  const wrapW = canvasWrap.clientWidth || 800;
+  const wrapH = canvasWrap.clientHeight || 500;
+  mainCanvas.width  = wrapW;
+  mainCanvas.height = wrapH;
+  state.displayScale = Math.min(1, wrapW / state.imgW, wrapH / state.imgH);
+  draw();
+});
+</script>
+</body>
+</html>
