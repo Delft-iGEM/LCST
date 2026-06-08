@@ -159,7 +159,7 @@ T_°C,Absorbance_raw,Absorbance_smooth,dAbsorbance_dT
 
 ## Methods text
 
-The `METHOD.txt` file in each export is written to be pasted directly into a paper's methods section. It documents the digitisation procedure, smoothing algorithm, derivative computation, Tm definition, calibration coordinates, R² values, axis scale types, and all numerical results.
+The `METHOD.txt` file in each export is written to be pasted directly into a paper's methods section. It documents the digitisation procedure, smoothing algorithm, derivative computation, LCST definition, calibration coordinates, R² values, axis scale types, and all numerical results.
 
 ---
 
@@ -173,13 +173,13 @@ All stored pixel coordinates are in **original image pixels**, independent of zo
 
 When snapping is enabled, the tool searches a circular region of radius r (in image pixels) around the clicked point. It finds the intensity-weighted centroid of pixels below a luminance threshold defined as `min_luminance + 0.3 × (max_luminance − min_luminance)` within the search window. This places the calibration point at the optical centre of the tick mark, not at the cursor tip.
 
-### Derivative and Tm
+### Derivative and LCST
 
 ```
 dA/dT(i) = [A_smooth(i+1) − A_smooth(i-1)] / [T(i+1) − T(i-1)]
 ```
 
-Tm is the temperature at index i where |dA/dT(i)| is maximum. The LOESS smoother is a locally weighted linear regression with a tricube kernel; bandwidth k controls the number of neighbouring points used in each local fit.
+LCST is the temperature at index i where |dA/dT(i)| is maximum. The LOESS smoother is a locally weighted linear regression with a tricube kernel; bandwidth k controls the number of neighbouring points used in each local fit.
 
 ---
 
