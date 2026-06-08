@@ -1,18 +1,18 @@
 # LCST Extractor
 
-A browser-based tool for standardised, reproducible extraction of Lower Critical Solution Temperature (LCST) from absorbance-versus-temperature graphs published as images. No installation, no server, no dependencies to manage — open `LCST_extraction.html` in any modern browser and start working.
+A browser-based tool for standardised, reproducible extraction of Lower Critical Solution Temperature (LCST) from absorbance-versus-temperature graphs published as images. No installation, no server, no dependencies to manage — open `tm_extractor.html` in any modern browser and start working.
 
 ---
 
 ## The problem it solves
 
-Absorbance LCST curves are  published as figures in papers, patents, theses, and lab reports. Most times the raw data is unavailable and in some cases the LCST isn´t specified. Extracting this transition temperature with a consistent adn reproducible protocol is ofe upmost importance for the construction of a dataset that furthers the analytical and quatitative study of ELPs. Extracting LCST values by eye is subjective, hard to document, and not reproducible between analysts. This tool replaces eyeballing with a fully documented, algorithmically consistent workflow:
+Absorbance LCST curves are published as figures in papers, patents, theses, and lab reports. Most times the raw data is unavailable and in some cases the LCST isn't specified. Extracting this transition temperature with a consistent and reproducible protocol is of upmost importance for the construction of a dataset that furthers the analytical and quantitative study of ELPs. Extracting LCST values by eye is subjective, hard to document, and not reproducible between analysts. This tool replaces eyeballing with a fully documented, algorithmically consistent workflow:
 
 1. Calibrate the axes against known tick marks on the image
 2. Click points along the curve
-3. The tool fits a LOESS smoother, computes the derivative dA/dT numerically, and reports LCST as the temperature of the peak gradient (in accordance with the general ELP corpus) — the inflection point of the sigmoid.
+3. The tool fits a LOESS smoother, computes the derivative dA/dT numerically, and reports LCST as the temperature of the peak gradient (in accordance with the general ELP corpus) — the inflection point of the sigmoid
 
-Every parameter, every clicked coordinate, and every computed value is saved and can be reloaded, verified, or handed to a collaborator. This tool isn't exclusive to LCST or Absorbance as a function of temperature, it can be used to get datapoints from any graphed curve. 
+Every parameter, every clicked coordinate, and every computed value is saved and can be reloaded, verified, or handed to a collaborator. This tool isn't exclusive to LCST or absorbance as a function of temperature — it can be used to extract datapoints from any graphed curve.
 
 ---
 
@@ -36,14 +36,14 @@ Every parameter, every clicked coordinate, and every computed value is saved and
 - Undo last point or clear all points for the active curve independently
 
 ### LCST computation
-- LOESS smoothing with adjustable bandwidth k (3–40); larger k smooths more, smaller k follows the raw data more closely
+- LOESS smoothing with adjustable bandwidth k (1–40); larger k smooths more, smaller k follows the raw data more closely
 - First derivative dA/dT computed by central finite differences on the smoothed curve
 - LCST defined as the temperature at which |dA/dT| is maximised
 - Results update live as points are added or smoothing is adjusted
 
 ### Visualisation
 - Live chart panel showing all smoothed curves and their derivatives side by side
-- LCST vertical markers on derivative plots
+- LCST markers on derivative plots
 - Data table of smoothed values for all curves
 
 ### Session save and reload
@@ -67,7 +67,7 @@ Every parameter, every clicked coordinate, and every computed value is saved and
 5. Check the reconstructed axis overlay aligns with the image axes
 6. Add a curve, set its name and sample label
 7. Mode: Digitize → click ~20–40 points along the curve
-8. Read Tm from the Results panel
+8. Read LCST from the Results panel
 9. Repeat steps 6–8 for additional curves
 10. Export session
 ```
@@ -103,12 +103,12 @@ where `transformed_value` is the raw tick value for linear axes, or `log₁₀(t
 ```json
 {
   "format_version": "2.0",
-  "software": "Tm Extractor v2",
+  "software": "LCST Extractor v2",
   "exported": "2025-06-01T14:23:00.000Z",
   "method": {
     "smoothing_algorithm": "LOESS",
     "smoothing_bandwidth_k": 10,
-    "tm_definition": "Temperature at which |dA/dT| is maximised",
+    "tm_definition": "Temperature at which |dA/dT| is maximised — recorded as LCST (lower critical solution temperature)",
     "derivative_method": "Central finite differences on LOESS-smoothed data",
     "calibration": {
       "x_axis": {
@@ -118,7 +118,7 @@ where `transformed_value` is the raw tick value for linear axes, or `log₁₀(t
         "regression": { "slope": -0.5432, "intercept": 312.1, "r2": 0.999987, "fit_space": "linear" },
         "pixel_points": [
           { "pixel_x": 102.3, "pixel_y": 487.1, "real_value": 20 },
-          ...
+          "..."
         ]
       },
       "y_axis": { "..." }
@@ -129,11 +129,15 @@ where `transformed_value` is the raw tick value for linear axes, or `log₁₀(t
     {
       "name": "Curve 1",
       "label": "WT 150 mM NaCl",
-      "tm_result": { "Tm": 58.432, "Tm_unit": "°C", "max_dA_dT": 0.02341 },
+      "tm_result": {
+        "LCST": 58.432,
+        "LCST_unit": "°C",
+        "max_dA_dT": 0.02341
+      },
       "n_points": 34,
       "raw_points": [ { "pixel_x": 203.1, "pixel_y": 341.2, "°C": 42.1, "Absorbance": 0.2341 }, "..." ],
       "smoothed_curve": [ "..." ],
-      "derivative": [ "..." ]
+      "derivative": [ { "T": 42.1, "dA_dT": 0.00394 }, "..." ]
     }
   ]
 }
@@ -142,17 +146,25 @@ where `transformed_value` is the raw tick value for linear axes, or `log₁₀(t
 ### `curve_<name>.csv`
 
 ```
-# Tm Extractor — Curve 1
+# LCST Extractor — Curve 1
 # Label: WT 150 mM NaCl
-# Tm = 58.4321 °C
+# LCST = 58.4321 °C
 # Smoothing bandwidth k = 10
 # Method: LOESS smooth + central finite difference derivative
 T_°C,Absorbance_raw,Absorbance_smooth,dAbsorbance_dT
 20.0000,0.18210,0.18341,
 22.5000,0.19103,0.19287,0.000394
 ...
-# Tm,58.4321
+# LCST,58.4321
 # max_dAbsorbance_dT,0.023410
+```
+
+### `summary.csv`
+
+```
+# LCST Extractor — Summary
+Curve,Label,n_points,LCST_°C,max_dA_dT,smoothing_k
+Curve 1,WT 150 mM NaCl,34,58.4321,0.023410,10
 ```
 
 ---
@@ -204,7 +216,7 @@ Any modern browser with Canvas 2D API and File API support. Tested in Chrome, Fi
 
 ## Reproducibility guarantee
 
-Two analysts working from the same `.zip` session file with the same smoothing parameter k will obtain an identical Tm, because the computation is fully deterministic from the stored pixel coordinates and calibration regression. The only source of inter-analyst variability is the initial choice of which points to click along the curve, which is documented in the exported pixel coordinates.
+Two analysts working from the same `.zip` session file with the same smoothing parameter k will obtain an identical LCST, because the computation is fully deterministic from the stored pixel coordinates and calibration regression. The only source of inter-analyst variability is the initial choice of which points to click along the curve, which is documented in the exported pixel coordinates.
 
 ---
 
@@ -219,3 +231,4 @@ Two analysts working from the same `.zip` session file with the same smoothing p
 ## License
 
 MIT
+****
